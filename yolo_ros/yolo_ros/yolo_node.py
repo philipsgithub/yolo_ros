@@ -15,6 +15,7 @@
 
 
 import cv2
+import numpy as np
 from typing import List, Dict
 from cv_bridge import CvBridge
 
@@ -35,7 +36,7 @@ from ultralytics.engine.results import Masks
 from ultralytics.engine.results import Keypoints
 
 from std_srvs.srv import SetBool
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage
 from yolo_msgs.msg import Point2D
 from yolo_msgs.msg import BoundingBox2D
 from yolo_msgs.msg import Mask
@@ -147,7 +148,7 @@ class YoloNode(LifecycleNode):
             )
 
         self._sub = self.create_subscription(
-            Image, "image_raw", self.image_cb, self.image_qos_profile
+            CompressedImage, "image_raw/compressed", self.image_cb, self.image_qos_profile
         )
 
         super().on_activate(state)
@@ -319,13 +320,15 @@ class YoloNode(LifecycleNode):
 
         return keypoints_list
 
-    def image_cb(self, msg: Image) -> None:
+    def image_cb(self, msg: CompressedImage) -> None:
+        self.get_logger().info(f"Image received.")
 
         if self.enable:
 
             # convert image + predict
-            cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
-            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            #cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
+            #cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            cv_image = cv2.imdecode(np.frombuffer(msg.data, np.uint8), cv2.IMREAD_COLOR)
             results = self.yolo.predict(
                 source=cv_image,
                 verbose=False,
@@ -377,6 +380,7 @@ class YoloNode(LifecycleNode):
             # publish detections
             detections_msg.header = msg.header
             self._pub.publish(detections_msg)
+            self.get_logger().info(f"Detections published.")
 
             del results
             del cv_image

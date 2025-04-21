@@ -33,7 +33,7 @@ import message_filters
 from cv_bridge import CvBridge
 from ultralytics.utils.plotting import Annotator, colors
 
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 from yolo_msgs.msg import BoundingBox2D
@@ -67,10 +67,11 @@ class DebugNode(LifecycleNode):
         )
 
         # pubs
-        self._dbg_pub = self.create_publisher(Image, "dbg_image", 10)
+        self._dbg_pub = self.create_publisher(CompressedImage, "dbg_image/compressed", 10)
         self._bb_markers_pub = self.create_publisher(MarkerArray, "dgb_bb_markers", 10)
         self._kp_markers_pub = self.create_publisher(MarkerArray, "dgb_kp_markers", 10)
 
+        print(state, "state")
         super().on_configure(state)
         self.get_logger().info(f"[{self.get_name()}] Configured")
 
@@ -81,7 +82,7 @@ class DebugNode(LifecycleNode):
 
         # subs
         self.image_sub = message_filters.Subscriber(
-            self, Image, "image_raw", qos_profile=self.image_qos_profile
+            self, CompressedImage, "image_raw", qos_profile=self.image_qos_profile
         )
         self.detections_sub = message_filters.Subscriber(
             self, DetectionArray, "detections", qos_profile=10
@@ -324,9 +325,12 @@ class DebugNode(LifecycleNode):
 
         return marker
 
-    def detections_cb(self, img_msg: Image, detection_msg: DetectionArray) -> None:
+    def detections_cb(self, img_msg: CompressedImage, detection_msg: DetectionArray) -> None:
+        self.get_logger().info(f"DEBUG detections received.")
 
-        cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg)
+
+        #cv_image = self.cv_bridge.imgmsg_to_cv2(img_msg)
+        cv_image = cv2.imdecode(np.frombuffer(img_msg.data, np.uint8), cv2.IMREAD_COLOR)
         bb_marker_array = MarkerArray()
         kp_marker_array = MarkerArray()
 
@@ -363,8 +367,19 @@ class DebugNode(LifecycleNode):
                     kp_marker_array.markers.append(marker)
 
         # publish dbg image
+
+        # Create CompressedImage message
+        compressed_msg = CompressedImage()
+        compressed_msg.header.stamp = self.get_clock().now().to_msg()
+        compressed_msg.header.frame_id = img_msg.header.frame_id
+        compressed_msg.format = 'jpeg'
+
+        # Encode image to jpeg format
+        _, jpeg_image = cv2.imencode('.jpg', cv_image, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        compressed_msg.data = np.array(jpeg_image).tobytes()
         self._dbg_pub.publish(
-            self.cv_bridge.cv2_to_imgmsg(cv_image, encoding=img_msg.encoding)
+            compressed_msg
+            #self.cv_bridge.cv2_to_imgmsg(cv_image, encoding=img_msg.encoding)
         )
         self._bb_markers_pub.publish(bb_marker_array)
         self._kp_markers_pub.publish(kp_marker_array)
