@@ -127,11 +127,32 @@ def generate_launch_description():
             description="Whether to use high-resolution segmentation masks if available in the model, enhancing mask quality for segmentation",
         )
 
+        rotation_cw_deg = LaunchConfiguration("rotation_cw_deg")
+        rotation_cw_deg_cmd = DeclareLaunchArgument(
+            "rotation_cw_deg",
+            default_value="0",
+            description="Rotate the image clockwise in degrees, but only for the inference (valid: 0, 90, -90)",
+        )
+
         input_image_topic = LaunchConfiguration("input_image_topic")
         input_image_topic_cmd = DeclareLaunchArgument(
             "input_image_topic",
             default_value="/camera/rgb/image_raw",
             description="Name of the input image topic",
+        )
+
+        output_detections_topic = LaunchConfiguration("output_detections_topic")
+        output_detections_topic_cmd = DeclareLaunchArgument(
+            "output_detections_topic",
+            default_value="detections",
+            description="Name of the output detections topic",
+        )
+
+        debug_detections_topic = LaunchConfiguration("debug_detections_topic")
+        debug_detections_topic_cmd = DeclareLaunchArgument(
+            "debug_detections_topic",
+            default_value="detections",
+            description="Name of the debug detections topic",
         )
 
         image_reliability = LaunchConfiguration("image_reliability")
@@ -239,10 +260,12 @@ def generate_launch_description():
                     "augment": augment,
                     "agnostic_nms": agnostic_nms,
                     "retina_masks": retina_masks,
+                    "rotation_cw_deg": rotation_cw_deg,
                     "image_reliability": image_reliability,
                 }
             ],
-            remappings=[("image_raw", input_image_topic)],
+            remappings=[("image_raw/compressed", input_image_topic),
+                        ("detections", output_detections_topic)],
         )
 
         tracking_node_cmd = Node(
@@ -251,7 +274,7 @@ def generate_launch_description():
             name="tracking_node",
             namespace=namespace,
             parameters=[{"tracker": tracker, "image_reliability": image_reliability}],
-            remappings=[("image_raw", input_image_topic)],
+            remappings=[("image_raw/compressed", input_image_topic)],
             condition=IfCondition(PythonExpression([str(use_tracking)])),
         )
 
@@ -284,7 +307,7 @@ def generate_launch_description():
             namespace=namespace,
             parameters=[{"image_reliability": image_reliability}],
             remappings=[
-                ("image_raw", input_image_topic),
+                ("image_raw/compressed", input_image_topic),
                 ("detections", debug_detections_topic),
             ],
             condition=IfCondition(PythonExpression([use_debug])),
@@ -305,7 +328,10 @@ def generate_launch_description():
             augment_cmd,
             agnostic_nms_cmd,
             retina_masks_cmd,
+            rotation_cw_deg_cmd,
             input_image_topic_cmd,
+            output_detections_topic_cmd,
+            debug_detections_topic_cmd,
             image_reliability_cmd,
             input_depth_topic_cmd,
             depth_image_reliability_cmd,

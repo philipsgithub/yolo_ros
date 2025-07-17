@@ -66,6 +66,7 @@ class YoloNode(LifecycleNode):
         self.declare_parameter("augment", False)
         self.declare_parameter("agnostic_nms", False)
         self.declare_parameter("retina_masks", False)
+        self.declare_parameter("rotation_cw_deg", 0)
 
         self.declare_parameter("enable", True)
         self.declare_parameter("image_reliability", QoSReliabilityPolicy.BEST_EFFORT)
@@ -101,6 +102,9 @@ class YoloNode(LifecycleNode):
         )
         self.retina_masks = (
             self.get_parameter("retina_masks").get_parameter_value().bool_value
+        )
+        self.rotation_cw_deg = (
+            self.get_parameter("rotation_cw_deg").get_parameter_value().integer_value
         )
 
         # ros params
@@ -329,6 +333,17 @@ class YoloNode(LifecycleNode):
             #cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
             #cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             cv_image = cv2.imdecode(np.frombuffer(msg.data, np.uint8), cv2.IMREAD_COLOR)
+            if self.rotation_cw_deg == 0:
+                pass
+            elif self.rotation_cw_deg == 90:
+                cv_image = cv2.rotate(cv_image, cv2.ROTATE_90_CLOCKWISE)
+                self.get_logger().info(f"Image rotated by 90deg cw.")
+            elif self.rotation_cw_deg == -90:
+                cv_image = cv2.rotate(cv_image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                self.get_logger().info(f"Image rotated by -90deg cw.")
+            else:
+                self.get_logger().error(f"Image rotation by {self.rotation_cw_deg} not implemented (valid: 0, 90, -90).")
+
             results = self.yolo.predict(
                 source=cv_image,
                 verbose=False,
@@ -344,6 +359,7 @@ class YoloNode(LifecycleNode):
                 device=self.device,
             )
             results: Results = results[0].cpu()
+            # TODO rotate results
 
             if results.boxes or results.obb:
                 hypothesis = self.parse_hypothesis(results)
@@ -367,13 +383,35 @@ class YoloNode(LifecycleNode):
                     aux_msg.class_name = hypothesis[i]["class_name"]
                     aux_msg.score = hypothesis[i]["score"]
 
-                    aux_msg.bbox = boxes[i]
+                    # reverse this rotation for output data
+                    if self.rotation_cw_deg == 0:
+                        aux_msg.bbox = boxes[i]
+                    elif self.rotation_cw_deg == 90:
+                        # note that this rotates the results 90 deg ccw to reverse the image rotation
+                        aux_msg.bbox = boxes[i]
+                        aux_msg.bbox.center.position.x = boxes[i].center.position.y
+                        aux_msg.bbox.center.position.y = (cv_image.shape[1] - 1) - boxes[i].center.position.x
+                        aux_msg.bbox.size.x = boxes[i].size.y
+                        aux_msg.bbox.size.y = boxes[i].size.x
+                    elif self.rotation_cw_deg == -90:
+                        # note that this rotates the results 90 deg cw to reverse the image rotation
+                        aux_msg.bbox = boxes[i]
+                        aux_msg.bbox.center.position.x = (cv_image.shape[0] - 1) - boxes[i].center.position.y
+                        aux_msg.bbox.center.position.y = boxes[i].center.position.x
+                        aux_msg.bbox.size.x = boxes[i].size.y
+                        aux_msg.bbox.size.y = boxes[i].size.x
+                    else:
+                        self.get_logger().error(f"Image rotation by {self.rotation_cw_deg} not implemented (valid: 0, 90, -90).")
+
+                    self.get_logger().info(f"{boxes[i]=}")
 
                 if results.masks and masks:
                     aux_msg.mask = masks[i]
+                    self.get_logger().info(f"{masks[i]=}")
 
                 if results.keypoints and keypoints:
                     aux_msg.keypoints = keypoints[i]
+                    self.get_logger().info(f"{keypoints[i]=}")
 
                 detections_msg.detections.append(aux_msg)
 
