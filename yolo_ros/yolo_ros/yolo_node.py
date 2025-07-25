@@ -15,7 +15,6 @@
 
 
 import cv2
-import numpy as np
 from typing import List, Dict
 from cv_bridge import CvBridge
 
@@ -36,7 +35,7 @@ from ultralytics.engine.results import Masks
 from ultralytics.engine.results import Keypoints
 
 from std_srvs.srv import SetBool
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image
 from yolo_msgs.msg import Point2D
 from yolo_msgs.msg import BoundingBox2D
 from yolo_msgs.msg import Mask
@@ -152,7 +151,7 @@ class YoloNode(LifecycleNode):
             )
 
         self._sub = self.create_subscription(
-            CompressedImage, "image_raw/compressed", self.image_cb, self.image_qos_profile
+            Image, "image_raw", self.image_cb, self.image_qos_profile
         )
 
         super().on_activate(state)
@@ -324,15 +323,12 @@ class YoloNode(LifecycleNode):
 
         return keypoints_list
 
-    def image_cb(self, msg: CompressedImage) -> None:
-        self.get_logger().info(f"Image received.")
+    def image_cb(self, msg: Image) -> None:
 
         if self.enable:
 
             # convert image + predict
-            #cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
-            #cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-            cv_image = cv2.imdecode(np.frombuffer(msg.data, np.uint8), cv2.IMREAD_COLOR)
+            cv_image = self.cv_bridge.imgmsg_to_cv2(msg)
             if self.rotation_cw_deg == 0:
                 pass
             elif self.rotation_cw_deg == 90:
@@ -343,7 +339,7 @@ class YoloNode(LifecycleNode):
                 self.get_logger().info(f"Image rotated by -90deg cw.")
             else:
                 self.get_logger().error(f"Image rotation by {self.rotation_cw_deg} not implemented (valid: 0, 90, -90).")
-
+            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             results = self.yolo.predict(
                 source=cv_image,
                 verbose=False,
@@ -418,7 +414,6 @@ class YoloNode(LifecycleNode):
             # publish detections
             detections_msg.header = msg.header
             self._pub.publish(detections_msg)
-            self.get_logger().info(f"Detections published.")
 
             del results
             del cv_image
