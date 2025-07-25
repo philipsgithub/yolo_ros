@@ -264,8 +264,10 @@ def generate_launch_description():
                     "image_reliability": image_reliability,
                 }
             ],
-            remappings=[("image_raw/compressed", input_image_topic),
+            remappings=[("image_raw", input_image_topic),
                         ("detections", output_detections_topic)],
+            #remappings=[("image_raw/compressed", input_image_topic),
+            #            ("detections", output_detections_topic)],
         )
 
         tracking_node_cmd = Node(
@@ -274,7 +276,7 @@ def generate_launch_description():
             name="tracking_node",
             namespace=namespace,
             parameters=[{"tracker": tracker, "image_reliability": image_reliability}],
-            remappings=[("image_raw/compressed", input_image_topic)],
+            remappings=[("image_raw", input_image_topic)],
             condition=IfCondition(PythonExpression([str(use_tracking)])),
         )
 
@@ -307,7 +309,7 @@ def generate_launch_description():
             namespace=namespace,
             parameters=[{"image_reliability": image_reliability}],
             remappings=[
-                ("image_raw/compressed", input_image_topic),
+                ("image_raw", input_image_topic),
                 ("detections", debug_detections_topic),
             ],
             condition=IfCondition(PythonExpression([use_debug])),
