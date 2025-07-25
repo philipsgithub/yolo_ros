@@ -373,6 +373,12 @@ class YoloNode(LifecycleNode):
             for i in range(len(results)):
 
                 aux_msg = Detection()
+                if hypothesis[i]['class_name'] != "Safety Cone":
+                    continue
+                if boxes[i].size.x < 50 or boxes[i].size.y < 50:
+                    self.get_logger().info(f"BBox too small: {boxes[i].size}")
+                    continue
+                self.get_logger().info(f"Class Name: {hypothesis[i]['class_name']}")
 
                 if results.boxes or results.obb and hypothesis and boxes:
                     aux_msg.class_id = hypothesis[i]["class_id"]
@@ -380,18 +386,19 @@ class YoloNode(LifecycleNode):
                     aux_msg.score = hypothesis[i]["score"]
 
                     # reverse this rotation for output data
+                    self.get_logger().info(f"Original: {boxes[i]=}")
                     if self.rotation_cw_deg == 0:
                         aux_msg.bbox = boxes[i]
                     elif self.rotation_cw_deg == 90:
                         # note that this rotates the results 90 deg ccw to reverse the image rotation
-                        aux_msg.bbox = boxes[i]
+                        #aux_msg.bbox = boxes[i]
                         aux_msg.bbox.center.position.x = boxes[i].center.position.y
                         aux_msg.bbox.center.position.y = (cv_image.shape[1] - 1) - boxes[i].center.position.x
                         aux_msg.bbox.size.x = boxes[i].size.y
                         aux_msg.bbox.size.y = boxes[i].size.x
                     elif self.rotation_cw_deg == -90:
                         # note that this rotates the results 90 deg cw to reverse the image rotation
-                        aux_msg.bbox = boxes[i]
+                        #aux_msg.bbox = boxes[i]
                         aux_msg.bbox.center.position.x = (cv_image.shape[0] - 1) - boxes[i].center.position.y
                         aux_msg.bbox.center.position.y = boxes[i].center.position.x
                         aux_msg.bbox.size.x = boxes[i].size.y
@@ -399,7 +406,7 @@ class YoloNode(LifecycleNode):
                     else:
                         self.get_logger().error(f"Image rotation by {self.rotation_cw_deg} not implemented (valid: 0, 90, -90).")
 
-                    self.get_logger().info(f"{boxes[i]=}")
+                    self.get_logger().info(f"Rotated: {aux_msg.bbox=}")
 
                 if results.masks and masks:
                     aux_msg.mask = masks[i]
